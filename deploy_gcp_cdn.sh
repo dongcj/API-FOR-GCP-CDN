@@ -1,21 +1,31 @@
 #!/bin/bash
 # Author: krrish
 # Create or Update scripts for Cloud CDN
-# usage: ./$0 <accelerate_domain> <source_domain> <source_protocol>  <source_host>  <cache_no_param>  <cache_seconds>
+# usage: ./$0 <accelerate_domain> <source_domain> <source_protocol> <source_host> <cache_no_param> <cache_seconds>
 #
-# accelerate_domain: 前端加速域名
-# source_domain: 回源域名
-# source_protocol: 回源协议
-# source_host: 回源主机
-# cache_param: 是否去参缓存
-# cache_seconds: 缓存天数
+# accelerate_domain: 前端加速域名, 不需要带 http(s)://
+# source_domain: 回源域名, 不需要带 http(s)://
+# source_protocol: 回源协议, http or https
+# source_host: 回源主机, 主机名, 不需要带 http(s)://
+# cache_no_param: 是否去参缓存, yes or no
+# cache_seconds: 缓存秒数，最大 31622400 秒
 #
 
 # 2021-06-24 17:34:46 修复了 DNS record exist 的问题
 # 2021-07-01 17:36:42 修复了 certs & https target proxy
 # 2021-07-20 11:56:30 修改了 CACHE DAYS 至 CACHE_SECONDS
 
-PROJECT_ID="THIS_IS_YOUR_PROJECT_ID"
+
+# 如果不指定 PROJECT_ID, 即为当前所在 project
+# 查看当前环境所在项目: gcloud config get-value project 
+PROJECT_ID=""
+
+# CDN 域名配置表, 每次配置完后, 将此次配置域名写入一个 CSV 文件中
+DOMAIN_CONFIG_FILE="cdn_domain_config.csv"
+
+# 日志位置
+LOG_FILE=/tmp/`basename ${0%.*}`.log
+
 
 ACCELERATE_DOMAIN=$1
 SOURCE_DOMAIN=$2
@@ -24,9 +34,15 @@ SOURCE_HOST=$4
 CACHE_NO_PARAM=$5
 CACHE_SECONDS=$6
 
-
 ACCELERATE_DOMAIN_SERVICENAME=${ACCELERATE_DOMAIN//./-}
-DOMAIN_CONFIG_FILE="cdn_domain_config.csv"
+
+
+if [ -z "$PROJECT_ID" ]; then 
+    PROJECT_STR=" --quiet --verbosity=critical"
+else
+    PROJECT_STR=" --project=$PROJECT_ID --quiet --verbosity=critical"
+fi
+
 
 Is_Domain() {
 
@@ -58,7 +74,7 @@ if [ -z "$ACCELERATE_DOMAIN" -o -z "$SOURCE_DOMAIN" -o -z "$SOURCE_PROTOCOL" -o 
     echo "SOURCE_PROTOCOL---回源协议"
     echo "SOURCE_HOST---回源主机"
     echo "CACHE_NO_PARAM---是否去参缓存"
-    echo "CACHE_SECONDS---缓存秒数,最大为 31622400"
+    echo "CACHE_SECONDS---缓存秒数"
     echo 
     exit 1;
 fi
@@ -90,7 +106,7 @@ case $CACHE_NO_PARAM in
     *) echo "CACHE_NO_PARAM must be yes / no" && exit 4
 esac
 
-# gcloud command settings
+# name settings
 export NEG_NAME=neg-$ACCELERATE_DOMAIN_SERVICENAME
 export BACKEND_SERIVCE_NAME=bs-$ACCELERATE_DOMAIN_SERVICENAME
 export URLMAP_NAME=lb-$ACCELERATE_DOMAIN_SERVICENAME
@@ -106,7 +122,6 @@ export FORWARD_RULE_IPV6_HTTPS=fr-ipv6-https-$ACCELERATE_DOMAIN_SERVICENAME
 
 Echo_To_Log() {
   LOGTIME='eval date "+%Y-%m-%d %H:%M:%S"'
-  LOG_FILE=/tmp/`basename ${0%.*}`.log
   local info="$*"
   #echo -e "`$LOGTIME` $info"
   echo -e "`$LOGTIME` $info" >>${LOG_FILE} 2>&1
@@ -116,29 +131,29 @@ Echo_To_Log() {
 
 if [ "$7" == "remove" ]; then
 
-    Echo_To_Log "############ deleting begin ##########"
+    Echo_To_Log "############ deleting begin ############"
     Echo_To_Log "delete forwarding rules"
-    gcloud compute forwarding-rules delete $FORWARD_RULE_IPV4_HTTP --global --quiet
-    gcloud compute forwarding-rules delete $FORWARD_RULE_IPV4_HTTPS --global --quiet
-    gcloud compute forwarding-rules delete $FORWARD_RULE_IPV6_HTTP --global --quiet
-    gcloud compute forwarding-rules delete $FORWARD_RULE_IPV6_HTTPS --global --quiet
+    gcloud compute forwarding-rules delete $FORWARD_RULE_IPV4_HTTP $PROJECT_STR --global
+    gcloud compute forwarding-rules delete $FORWARD_RULE_IPV4_HTTPS $PROJECT_STR --global
+    gcloud compute forwarding-rules delete $FORWARD_RULE_IPV6_HTTP $PROJECT_STR --global
+    gcloud compute forwarding-rules delete $FORWARD_RULE_IPV6_HTTPS $PROJECT_STR --global
     
     Echo_To_Log "delete target proxies"
-    gcloud compute target-http-proxies delete $TARGET_HTTP_PROXY_NAME --quiet
-    gcloud compute target-https-proxies delete $TARGET_HTTPS_PROXY_NAME --quiet
+    gcloud compute target-http-proxies delete $TARGET_HTTP_PROXY_NAME $PROJECT_STR
+    gcloud compute target-https-proxies delete $TARGET_HTTPS_PROXY_NAME $PROJECT_STR
     
     Echo_To_Log "delete url map"
-    gcloud beta compute url-maps  delete $URLMAP_NAME --quiet
+    gcloud beta compute url-maps  delete $URLMAP_NAME $PROJECT_STR
     
     Echo_To_Log "delete backend services"
-    gcloud beta compute backend-services delete $BACKEND_SERIVCE_NAME --global --quiet 
+    gcloud beta compute backend-services delete $BACKEND_SERIVCE_NAME $PROJECT_STR --global
     
     Echo_To_Log "delete NEG"
-    gcloud compute network-endpoint-groups delete $NEG_NAME --global  --quiet
+    gcloud compute network-endpoint-groups delete $NEG_NAME $PROJECT_STR --global
     
     Echo_To_Log "delete ip addresses"
-    gcloud compute addresses delete $IPV4_RESERVED_NAME --global  --quiet
-    gcloud compute addresses delete $IPV6_RESERVED_NAME --global  --quiet
+    gcloud compute addresses delete $IPV4_RESERVED_NAME $PROJECT_STR --global
+    gcloud compute addresses delete $IPV6_RESERVED_NAME $PROJECT_STR --global
     
     # call the scripts to delete 
     if [ -f $DOMAIN_CONFIG_FILE ]; then
@@ -151,7 +166,7 @@ if [ "$7" == "remove" ]; then
         
     fi
     
-    Echo_To_Log "############ deleting end ##########"
+    Echo_To_Log "############ deleting end ############"
     
     exit 99
 fi
@@ -171,7 +186,7 @@ Echo_To_Log "-------------------------------"
 # Create NEG
 ORIGIN_NEG_NAME=`gcloud compute network-endpoint-groups list \
     --filter="name=$NEG_NAME" \
-    --format="csv[no-heading](name)" --verbosity=critical`
+    --format="csv[no-heading](name)"`
     
 if [ -z "$ORIGIN_NEG_NAME" ]; then
     UPDATE=false
@@ -189,17 +204,16 @@ else
 fi
 
 NEG_ENDPOINT=`gcloud compute network-endpoint-groups \
-  list-network-endpoints $NEG_NAME  --global \
-  --format="csv[no-heading](FQDN,PORT)" --verbosity=critical`
+  list-network-endpoints $NEG_NAME $PROJECT_STR --global \
+  --format="csv[no-heading](FQDN,PORT)"`
   
 if [ -z "$NEG_ENDPOINT" ]; then
   
     Echo_To_Log "adding endpoint fqdn: $SOURCE_DOMAIN,port=$SOURCE_PORT for neg: $NEG_NAME"
     gcloud compute \
-    network-endpoint-groups update $NEG_NAME \
-      --project=$PROJECT_ID \
+    network-endpoint-groups update $NEG_NAME $PROJECT_STR \
       --add-endpoint=fqdn=$SOURCE_DOMAIN,port=$SOURCE_PORT \
-      --global  --verbosity=critical >>$LOG_FILE 2>&1
+      --global >>$LOG_FILE 2>&1
 else
     # if update 
     if $UPDATE; then
@@ -215,17 +229,15 @@ else
             
             Echo_To_Log "updating endpoint fqdn"
             Echo_To_Log "deleting endpoint fqdn: $CUR_FQDN,port=$CUR_PORT for neg: $NEG_NAME"
-            gcloud compute network-endpoint-groups update  $NEG_NAME \
-              --project=$PROJECT_ID \
+            gcloud compute network-endpoint-groups update  $NEG_NAME $PROJECT_STR \
               --remove-endpoint=fqdn=$CUR_FQDN,port=$CUR_PORT \
-              --global --verbosity=critical >>$LOG_FILE 2>&1
+              --global >>$LOG_FILE 2>&1
               
             # then, add a new endpoint
             Echo_To_Log "adding endpoint fqdn: $SOURCE_DOMAIN,port=$SOURCE_PORT for neg: $NEG_NAME"
-            gcloud compute network-endpoint-groups update $NEG_NAME \
-              --project=$PROJECT_ID \
+            gcloud compute network-endpoint-groups update $NEG_NAME $PROJECT_STR \
               --add-endpoint=fqdn=$SOURCE_DOMAIN,port=$SOURCE_PORT \
-              --global  --verbosity=critical >>$LOG_FILE 2>&1
+              --global >>$LOG_FILE 2>&1
         fi
     
 
@@ -234,10 +246,8 @@ else
 fi
 
 
-CUR_BACKEND_SERIVCE=`gcloud beta compute backend-services describe $BACKEND_SERIVCE_NAME \
-   --format="csv[no-heading](cdnPolicy.cacheKeyPolicy.includeQueryString,customRequestHeaders)" \
-   --verbosity=critical \
-   --global`
+CUR_BACKEND_SERIVCE=`gcloud beta compute backend-services describe $BACKEND_SERIVCE_NAME $PROJECT_STR \
+   --format="csv[no-heading](cdnPolicy.cacheKeyPolicy.includeQueryString,customRequestHeaders)" --global`
    
    
 if [ $CACHE_NO_PARAM = "yes" ]; then
@@ -252,8 +262,7 @@ if [ -z "$CUR_BACKEND_SERIVCE" ]; then
   
     Echo_To_Log "creating backend-services $BACKEND_SERIVCE_NAME"
     gcloud beta compute \
-    backend-services create $BACKEND_SERIVCE_NAME \
-      --project=$PROJECT_ID \
+    backend-services create $BACKEND_SERIVCE_NAME $PROJECT_STR\
       --protocol=HTTP \
       --global \
       --enable-cdn \
@@ -265,7 +274,7 @@ if [ -z "$CUR_BACKEND_SERIVCE" ]; then
       --cache-mode=force_cache_all \
       --custom-request-header="Host: $SOURCE_HOST" \
       --client-ttl=86400 \
-      --timeout=600 --verbosity=critical >>$LOG_FILE 2>&1
+      --timeout=600 >>$LOG_FILE 2>&1
 else
 
     if $UPDATE; then
@@ -278,8 +287,7 @@ else
             
             Echo_To_Log "updating backend-service: $BACKEND_SERIVCE_NAME"
             
-            gcloud beta compute backend-services update $BACKEND_SERIVCE_NAME \
-              --project=$PROJECT_ID \
+            gcloud beta compute backend-services update $BACKEND_SERIVCE_NAME $PROJECT_STR \
               --protocol=HTTP \
               --global \
               --enable-cdn \
@@ -291,7 +299,7 @@ else
               --cache-mode=force_cache_all \
               --custom-request-header="Host: $SOURCE_HOST" \
               --client-ttl=86400 \
-              --timeout=600 --verbosity=critical >>$LOG_FILE 2>&1
+              --timeout=600 >>$LOG_FILE 2>&1
             
             
         fi
@@ -299,29 +307,28 @@ else
 fi
 
 # add backend
-if [ -z "`gcloud beta compute backend-services list \
+if [ -z "`gcloud beta compute backend-services list $PROJECT_STR \
   --filter="NAME=$BACKEND_SERIVCE_NAME" \
-  --format="csv[no-heading](backends)" --verbosity=critical`" ]; then
+  --format="csv[no-heading](backends)"`" ]; then
   
     Echo_To_Log "adding backend neg: $NEG_NAME for backend: $BACKEND_SERIVCE_NAME"
     gcloud compute \
-    backend-services add-backend $BACKEND_SERIVCE_NAME \
-      --project=$PROJECT_ID \
+    backend-services add-backend $BACKEND_SERIVCE_NAME $PROJECT_STR \
       --capacity-scaler=1 \
       --global-network-endpoint-group \
       --network-endpoint-group $NEG_NAME \
-      --global --verbosity=critical >>$LOG_FILE 2>&1
+      --global >>$LOG_FILE 2>&1
 else
     Echo_To_Log "skip backend add"
 fi
     
 # create urlmap
-if [ -z "`gcloud beta compute url-maps list \
+if [ -z "`gcloud beta compute url-maps list $PROJECT_STR \
   --filter="NAME=$URLMAP_NAME" \
-  --format="csv[no-heading](name)" --verbosity=critical`" ]; then
+  --format="csv[no-heading](name)"`" ]; then
   
     Echo_To_Log "creating urlmap: $URLMAP_NAME with default service: $BACKEND_SERIVCE_NAME"
-    gcloud compute url-maps create $URLMAP_NAME \
+    gcloud compute url-maps create $URLMAP_NAME $PROJECT_STR \
       --default-service $BACKEND_SERIVCE_NAME >>$LOG_FILE 2>&1
 else
     Echo_To_Log "skip urlmap create"
@@ -331,11 +338,11 @@ fi
 # create target http proxy
 if [ -z "`gcloud compute target-http-proxies list \
   --filter="NAME=$TARGET_HTTP_PROXY_NAME" \
-  --format="csv[no-heading](name)" --verbosity=critical`" ]; then
+  --format="csv[no-heading](name)"`" ]; then
     
     Echo_To_Log "creating target-http-proxy: $TARGET_HTTP_PROXY_NAME for urlmap: $URLMAP_NAME"
-    gcloud compute target-http-proxies create $TARGET_HTTP_PROXY_NAME \
-      --url-map $URLMAP_NAME --verbosity=critical >>$LOG_FILE 2>&1
+    gcloud compute target-http-proxies create $TARGET_HTTP_PROXY_NAME $PROJECT_STR \
+      --url-map $URLMAP_NAME >>$LOG_FILE 2>&1
 else
     Echo_To_Log "skip target-http-proxy create"
 fi
@@ -344,8 +351,8 @@ fi
 # get the best certs for this domain
 Echo_To_Log "getting the best certs for $ACCELERATE_DOMAIN"
 
-ALL_SSL_CERTS=`gcloud beta compute ssl-certificates list \
-  --format="csv[no-heading](name)" --verbosity=critical`
+ALL_SSL_CERTS=`gcloud beta compute ssl-certificates list $PROJECT_STR \
+  --format="csv[no-heading](name)"`
 
 
 # First：find the cert match name: cert-$ACCELERATE_DOMAIN_SERVICENAME
@@ -367,9 +374,8 @@ else
         for wd in $WILDCARD_DOMAIN; do
     
             # look into the ssl cert
-            if gcloud beta compute ssl-certificates describe  $wd \
-              --format=json --verbosity=critical | \
-              jq ".subjectAlternativeNames" | grep -q "*"; then
+            if gcloud beta compute ssl-certificates describe  $wd $PROJECT_STR \
+              --format=json | jq ".subjectAlternativeNames" | grep -q "*"; then
                 
                 BEST_CERT=$wd
                 break
@@ -394,12 +400,12 @@ if [ -z "$BEST_CERT" ]; then
 
 else
     Echo_To_Log "The match cert: $BEST_CERT"
-    if [ -z "`gcloud compute target-https-proxies list \
+    if [ -z "`gcloud compute target-https-proxies list $PROJECT_STR \
       --filter="NAME=$TARGET_HTTPS_PROXY_NAME" \
-      --format="csv[no-heading](name)" --verbosity=critical`" ]; then
+      --format="csv[no-heading](name)"`" ]; then
     
         Echo_To_Log "creating target-https-proxy: $TARGET_HTTPS_PROXY_NAME for urlmap: $URLMAP_NAME"
-        gcloud compute target-https-proxies create $TARGET_HTTPS_PROXY_NAME \
+        gcloud compute target-https-proxies create $TARGET_HTTPS_PROXY_NAME $PROJECT_STR \
           --url-map $URLMAP_NAME \
           --ssl-certificates $BEST_CERT >>$LOG_FILE 2>&1
     else
@@ -409,19 +415,19 @@ else
 fi
 
 # create reserved ipv4 address
-IPV4_ADDRESS_FORMER=`gcloud compute addresses list \
+IPV4_ADDRESS_FORMER=`gcloud compute addresses list $PROJECT_STR \
   --filter="NAME=$IPV4_RESERVED_NAME" \
-  --format="csv[no-heading](address)" --verbosity=critical`
+  --format="csv[no-heading](address)"`
 
 if [ -z "$IPV4_ADDRESS_FORMER" ]; then
 
     Echo_To_Log "creating ipv4 address for $IPV4_RESERVED_NAME"
     # create reserved ip address
-    gcloud compute addresses create $IPV4_RESERVED_NAME --global >>$LOG_FILE 2>&1
+    gcloud compute addresses create $IPV4_RESERVED_NAME $PROJECT_STR --global >>$LOG_FILE 2>&1
     # get ip address 
-    IPV4_RESERVED=`gcloud compute addresses list \
+    IPV4_RESERVED=`gcloud compute addresses list $PROJECT_STR \
       --filter="NAME=$IPV4_RESERVED_NAME" \
-      --format="csv[no-heading](address)" --verbosity=critical`
+      --format="csv[no-heading](address)"`
 else
     IPV4_RESERVED=$IPV4_ADDRESS_FORMER
 fi
@@ -432,20 +438,21 @@ Echo_To_Log "ipv4 address for $IPV4_RESERVED_NAME is: $IPV4_RESERVED"
 if [ -n "$BEST_CERT" ]; then
 
     # create reserved ipv6 address
-    IPV6_ADDRESS_FORMER=`gcloud compute addresses list \
+    IPV6_ADDRESS_FORMER=`gcloud compute addresses list $PROJECT_STR \
       --filter="NAME=$IPV6_RESERVED_NAME" \
-      --format="csv[no-heading](address)" --verbosity=critical`
+      --format="csv[no-heading](address)"`
 
     if [ -z "$IPV6_ADDRESS_FORMER" ]; then
 
         Echo_To_Log "creating ipv6 address for $IPV6_RESERVED_NAME"
 
         # create reserved ip address
-        gcloud compute addresses create $IPV6_RESERVED_NAME --global --ip-version=ipv6 >>$LOG_FILE 2>&1
+        gcloud compute addresses create $IPV6_RESERVED_NAME $PROJECT_STR \
+          --global --ip-version=ipv6 >>$LOG_FILE 2>&1
         # get ip address 
-        IPV6_RESERVED=`gcloud compute addresses list \
+        IPV6_RESERVED=`gcloud compute addresses list $PROJECT_STR \
           --filter="NAME=$IPV6_RESERVED_NAME" \
-          --format="csv[no-heading](address)" --verbosity=critical`
+          --format="csv[no-heading](address)"`
     else
         IPV6_RESERVED=$IPV6_ADDRESS_FORMER
     fi
@@ -461,13 +468,12 @@ fi
 # create forwarding rules http
 if [ -z "`gcloud compute forwarding-rules list \
   --filter="NAME=$FORWARD_RULE_IPV4_HTTP" \
-  --format="csv[no-heading](name)" --verbosity=critical`" ]; then
+  --format="csv[no-heading](name)"`" ]; then
   
     Echo_To_Log "creating forwarding-rule: $FORWARD_RULE_IPV4_HTTP for target-http-proxy: $TARGET_HTTP_PROXY_NAME"
-    gcloud compute forwarding-rules create $FORWARD_RULE_IPV4_HTTP \
-      --global \
-      --target-http-proxy=$TARGET_HTTP_PROXY_NAME \
-      --ports=80  --verbosity=critical --address=$IPV4_RESERVED >>$LOG_FILE 2>&1
+    gcloud compute forwarding-rules create $FORWARD_RULE_IPV4_HTTP $PROJECT_STR \
+      --global --target-http-proxy=$TARGET_HTTP_PROXY_NAME \
+      --ports=80  --address=$IPV4_RESERVED >>$LOG_FILE 2>&1
 else
     Echo_To_Log "skip forwarding-rules-ipv4-http create"
 fi
@@ -475,13 +481,12 @@ fi
 
 if [ -z "`gcloud compute forwarding-rules list \
   --filter="NAME=$FORWARD_RULE_IPV6_HTTP" \
-  --format="csv[no-heading](name)" --verbosity=critical`" ]; then
+  --format="csv[no-heading](name)"`" ]; then
   
     Echo_To_Log "creating forwarding-rule: $FORWARD_RULE_IPV6_HTTP for target-http-proxy: $TARGET_HTTP_PROXY_NAME"
-    gcloud compute forwarding-rules create $FORWARD_RULE_IPV6_HTTP \
-      --global \
-      --target-http-proxy=$TARGET_HTTP_PROXY_NAME \
-      --ports=80 --verbosity=critical --address=$IPV6_RESERVED >>$LOG_FILE 2>&1
+    gcloud compute forwarding-rules create $FORWARD_RULE_IPV6_HTTP $PROJECT_STR \
+      --global --target-http-proxy=$TARGET_HTTP_PROXY_NAME \
+      --ports=80 --address=$IPV6_RESERVED >>$LOG_FILE 2>&1
 else
     Echo_To_Log "skip forwarding-rules-ipv6-http create"
 fi
@@ -494,29 +499,25 @@ if [ -z "$BEST_CERT" ]; then
 else
 
 
-    if [ -z "`gcloud compute forwarding-rules list \
+    if [ -z "`gcloud compute forwarding-rules list $PROJECT_STR \
       --filter="NAME=$FORWARD_RULE_IPV4_HTTPS" \
-      --format="csv[no-heading](name)" --verbosity=critical`" ]; then
+      --format="csv[no-heading](name)"`" ]; then
         
         Echo_To_Log "creating forwarding-rule: $FORWARD_RULE_IPV4_HTTPS for target-https-proxy: $TARGET_HTTPS_PROXY_NAME"
-        gcloud compute forwarding-rules create $FORWARD_RULE_IPV4_HTTPS \
-        --global \
-        --target-https-proxy=$TARGET_HTTPS_PROXY_NAME \
-        --ports=443 \
+        gcloud compute forwarding-rules create $FORWARD_RULE_IPV4_HTTPS $PROJECT_STR \
+        --global --target-https-proxy=$TARGET_HTTPS_PROXY_NAME --ports=443 \
         --address=$IPV4_RESERVED >>$LOG_FILE 2>&1
     else
         Echo_To_Log "skip forwarding-rules-ipv4-https create"
     fi
     
-    if [ -z "`gcloud compute forwarding-rules list \
+    if [ -z "`gcloud compute forwarding-rules list $PROJECT_STR \
       --filter="NAME=$FORWARD_RULE_IPV6_HTTPS" \
-      --format="csv[no-heading](name)" --verbosity=critical`" ]; then
+      --format="csv[no-heading](name)"`" ]; then
     
         Echo_To_Log "creating forwarding-rule: $FORWARD_RULE_IPV6_HTTPS for target-https-proxy: $TARGET_HTTPS_PROXY_NAME"
-        gcloud compute forwarding-rules create $FORWARD_RULE_IPV6_HTTPS \
-        --global \
-        --target-https-proxy=$TARGET_HTTPS_PROXY_NAME \
-        --ports=443 \
+        gcloud compute forwarding-rules create $FORWARD_RULE_IPV6_HTTPS $PROJECT_STR \
+        --global --target-https-proxy=$TARGET_HTTPS_PROXY_NAME --ports=443 \
         --address=$IPV6_RESERVED >>$LOG_FILE 2>&1
     else
         Echo_To_Log "skip forwarding-rules-ipv6-https create"
