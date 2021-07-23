@@ -14,7 +14,11 @@ GCP(Google Cloud Platform) 创建 Cloud CDN 对于初学者来说并不是十分
 
 ```sh
 deploy_gcp_cdn.sh  accelerate_domain  source_domain  source_protocol  source_host  cache_param  cache_seconds
+```
 
+## 参数说明
+
+```sh
 #
 # accelerate_domain: 前端加速域名, 不需要带 http(s)://
 # source_domain: 回源域名, 不需要带 http(s)://
@@ -24,6 +28,8 @@ deploy_gcp_cdn.sh  accelerate_domain  source_domain  source_protocol  source_hos
 # cache_seconds: 缓存秒数，最大 31622400 秒
 #
 ```
+
+如果需要删除域名，请在最后增加 `remove`  参数，请谨慎操作!
 
 ## Web API 调用方式
 
