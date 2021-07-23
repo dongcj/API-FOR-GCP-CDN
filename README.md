@@ -13,7 +13,7 @@ GCP(Google Cloud Platform) 创建 Cloud CDN 对于初学者来说并不是十分
 3. 执行以下命令:
 
 ```sh
-deploy_gcp_cdn.sh  accelerate_domain  source_domain  source_protocol  source_host  cache_param  cache_seconds
+bash deploy_gcp_cdn.sh  accelerate_domain  source_domain  source_protocol  source_host  cache_param  cache_seconds
 ```
 
 ## 参数说明
