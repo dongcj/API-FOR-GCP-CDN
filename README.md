@@ -1,9 +1,9 @@
 # api-for-gcp-cloudcdn 简介
 GCP(Google Cloud Platform) 创建 Cloud CDN 对于初学者来说并不是十分的友好! 
 
-如需配置多个加速域名，较耗时且易出错。
+如需配置多个加速域名，较耗时且易出错.
 
-本项目能通过「Shell 脚本」和 「API 接口」二种方式创建外部源站 CDN, 并统计域名信息
+本项目能通过「Shell 脚本」和 「API 接口」二种方式创建外部源站 CDN, 并统计域名信息.
 
 
 ## 脚本执行方式
