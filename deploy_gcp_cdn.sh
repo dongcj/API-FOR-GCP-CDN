@@ -11,11 +11,6 @@
 # cache_seconds: 缓存秒数，最大 31622400 秒
 #
 
-# 2021-06-24 17:34:46 修复了 DNS record exist 的问题
-# 2021-07-01 17:36:42 修复了 certs & https target proxy
-# 2021-07-20 11:56:30 修改了 CACHE DAYS 至 CACHE_SECONDS
-
-
 # 如果不指定 PROJECT_ID, 即为当前所在 project
 # 查看当前环境所在项目: gcloud config get-value project 
 PROJECT_ID=""
