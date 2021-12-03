@@ -118,7 +118,7 @@ export FORWARD_RULE_IPV6_HTTPS=fr-ipv6-https-$ACCELERATE_DOMAIN_SERVICENAME
 Echo_To_Log() {
   LOGTIME='eval date "+%Y-%m-%d %H:%M:%S"'
   local info="$*"
-  #echo -e "`$LOGTIME` $info"
+  # echo -e "`$LOGTIME` $info"
   echo -e "`$LOGTIME` $info" >>${LOG_FILE} 2>&1
 
 }
